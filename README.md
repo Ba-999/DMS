@@ -30,7 +30,7 @@
 - JDK 8+
 - MySQL 8.0+
 - Maven 3.6+（或用项目自带的 mvnw）
-- Node.js 16+（前端）
+- Node.js 16+（前端，可选）
 
 ### 2. 创建数据库
 
@@ -93,7 +93,7 @@ npm run dev
 ```bash
 cd frontend
 npm install
-npm run dev:host
+npm run dev --host
 ```
 
 启动后会显示局域网地址，例如 `http://192.168.1.100:5173`，手机浏览器输入该地址即可访问。
