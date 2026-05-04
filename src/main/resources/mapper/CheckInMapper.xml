@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bdqn.class7.springboot.dms.mapper.CheckInMapper">
+
+    <resultMap id="CheckInVo" type="com.bdqn.class7.springboot.dms.entity.CheckIn">
+        <id column="id" property="id"/>
+        <result column="student_id" property="studentId"/>
+        <result column="dormitory_id" property="dormitoryId"/>
+        <result column="check_in_date" property="checkInDate"/>
+        <result column="create_time" property="createTime"/>
+        <result column="student_no" property="studentNo"/>
+        <result column="student_name" property="studentName"/>
+        <result column="building_name" property="buildingName"/>
+        <result column="room_number" property="roomNumber"/>
+    </resultMap>
+
+    <select id="pageWithDetail" resultMap="CheckInVo">
+        SELECT c.*, s.student_no, s.name AS student_name,
+               b.name AS building_name, d.room_number
+        FROM bus_check_in c
+        LEFT JOIN bus_student s ON s.id = c.student_id
+        LEFT JOIN bus_dormitory d ON d.id = c.dormitory_id
+        LEFT JOIN bus_building b ON b.id = d.building_id
+        <if test="ew != null and ew.sqlSegment != null and ew.sqlSegment != ''">
+            ${ew.customSqlSegment}
+        </if>
+    </select>
+
+    <select id="selectLastByStudentId" resultMap="CheckInVo">
+        SELECT c.*, s.student_no, s.name AS student_name,
+               b.name AS building_name, d.room_number
+        FROM bus_check_in c
+        LEFT JOIN bus_student s ON s.id = c.student_id
+        LEFT JOIN bus_dormitory d ON d.id = c.dormitory_id
+        LEFT JOIN bus_building b ON b.id = d.building_id
+        WHERE c.student_id = #{studentId}
+        ORDER BY c.id DESC
+        LIMIT 1
+    </select>
+</mapper>

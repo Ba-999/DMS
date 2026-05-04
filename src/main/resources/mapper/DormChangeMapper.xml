@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bdqn.class7.springboot.dms.mapper.DormChangeMapper">
+
+    <resultMap id="DormChangeVo" type="com.bdqn.class7.springboot.dms.entity.DormChange">
+        <id column="id" property="id"/>
+        <result column="student_id" property="studentId"/>
+        <result column="from_dormitory_id" property="fromDormitoryId"/>
+        <result column="to_dormitory_id" property="toDormitoryId"/>
+        <result column="reason" property="reason"/>
+        <result column="status" property="status"/>
+        <result column="handle_remark" property="handleRemark"/>
+        <result column="apply_time" property="applyTime"/>
+        <result column="handle_time" property="handleTime"/>
+        <result column="student_no" property="studentNo"/>
+        <result column="student_name" property="studentName"/>
+        <result column="from_room_number" property="fromRoomNumber"/>
+        <result column="to_room_number" property="toRoomNumber"/>
+        <result column="from_building_name" property="fromBuildingName"/>
+        <result column="to_building_name" property="toBuildingName"/>
+    </resultMap>
+
+    <select id="pageWithDetail" resultMap="DormChangeVo">
+        SELECT dc.*, s.student_no, s.name AS student_name,
+               fd.room_number AS from_room_number, td.room_number AS to_room_number,
+               fb.name AS from_building_name, tb.name AS to_building_name
+        FROM bus_dorm_change dc
+        LEFT JOIN bus_student s ON s.id = dc.student_id
+        LEFT JOIN bus_dormitory fd ON fd.id = dc.from_dormitory_id
+        LEFT JOIN bus_dormitory td ON td.id = dc.to_dormitory_id
+        LEFT JOIN bus_building fb ON fb.id = fd.building_id
+        LEFT JOIN bus_building tb ON tb.id = td.building_id
+        <if test="ew != null and ew.sqlSegment != null and ew.sqlSegment != ''">
+            ${ew.customSqlSegment}
+        </if>
+    </select>
+</mapper>

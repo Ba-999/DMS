@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bdqn.class7.springboot.dms.mapper.DormitoryMapper">
+
+    <resultMap id="DormVo" type="com.bdqn.class7.springboot.dms.entity.Dormitory">
+        <id column="id" property="id"/>
+        <result column="building_id" property="buildingId"/>
+        <result column="room_number" property="roomNumber"/>
+        <result column="capacity" property="capacity"/>
+        <result column="current_number" property="currentNumber"/>
+        <result column="price" property="price"/>
+        <result column="building_name" property="buildingName"/>
+    </resultMap>
+
+    <select id="pageWithBuilding" resultMap="DormVo">
+        SELECT d.*, b.name AS building_name
+        FROM bus_dormitory d
+        LEFT JOIN bus_building b ON b.id = d.building_id
+        <if test="ew != null and ew.sqlSegment != null and ew.sqlSegment != ''">
+            ${ew.customSqlSegment}
+        </if>
+    </select>
+
+</mapper>
