@@ -10,10 +10,10 @@ import javax.servlet.http.HttpServletRequest;
 import javax.validation.constraints.NotBlank;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-/** 认证接口：登录 / 登出 / 当前用户 */
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
@@ -22,13 +22,15 @@ public class AuthController {
 
     private final SysUserService sysUserService;
     private final StudentService studentService;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     @PostMapping("/login")
     public Result<SysUserService.LoginVo> login(@RequestBody @Validated LoginDto dto) {
         if ("student".equals(dto.getLoginType())) {
             Student student = studentService.login(dto.getUsername(), dto.getPassword());
             String token = java.util.UUID.randomUUID().toString().replace("-", "");
-            AuthInterceptor.TOKEN_POOL.put(token, new LoginUser(student.getId(), student.getStudentNo(), student.getName(), student.getPhone(), 2, "student", student.getAvatar()));
+            AuthInterceptor.saveToken(redisTemplate, token,
+                new LoginUser(student.getId(), student.getStudentNo(), student.getName(), student.getPhone(), 2, "student", student.getAvatar()));
             return Result.ok(new SysUserService.LoginVo(token, student));
         }
         return Result.ok(sysUserService.login(dto.getUsername(), dto.getPassword()));
@@ -37,7 +39,7 @@ public class AuthController {
     @PostMapping("/logout")
     public Result<?> logout(HttpServletRequest request) {
         String token = request.getHeader("Authorization");
-        if (token != null) AuthInterceptor.TOKEN_POOL.remove(token);
+        if (token != null) redisTemplate.delete(AuthInterceptor.TOKEN_PREFIX + token);
         return Result.ok();
     }
 

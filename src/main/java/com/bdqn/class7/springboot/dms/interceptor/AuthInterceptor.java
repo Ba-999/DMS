@@ -2,25 +2,26 @@ package com.bdqn.class7.springboot.dms.interceptor;
 
 import com.bdqn.class7.springboot.dms.common.BusinessException;
 import com.bdqn.class7.springboot.dms.entity.LoginUser;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
-import java.util.concurrent.ConcurrentHashMap;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.util.concurrent.TimeUnit;
 
-/**
- * 简易登录拦截器：用内存 ConcurrentHashMap 维护 token -> 用户。
- * 请求头需携带 Authorization: <token>。
- * 登录接口会把 token 存入 TOKEN_POOL，登出时移除。
- */
 @Component
+@RequiredArgsConstructor
 public class AuthInterceptor implements HandlerInterceptor {
 
-    /** 全局 token 池：生产环境请替换为 Redis 或 JWT */
-    public static final ConcurrentHashMap<String, LoginUser> TOKEN_POOL = new ConcurrentHashMap<>();
+    /** Token 在 Redis 中的 key 前缀，30 分钟无操作过期 */
+    public static final String TOKEN_PREFIX = "token:";
+    public static final long TOKEN_EXPIRE_MINUTES = 30;
 
-    /** 当前线程登录用户，便于 Controller/Service 直接取用 */
+    private final RedisTemplate<String, Object> redisTemplate;
+
+    /** 当前线程登录用户，Controller/Service 直接取用 */
     public static final ThreadLocal<LoginUser> CURRENT_USER = new ThreadLocal<>();
 
     public static LoginUser currentUser() {
@@ -41,17 +42,31 @@ public class AuthInterceptor implements HandlerInterceptor {
         return loginUser;
     }
 
+    /** 登录成功后将 token -> LoginUser 存入 Redis，30 分钟过期 */
+    public static void saveToken(RedisTemplate<String, Object> redis, String token, LoginUser user) {
+        redis.opsForValue().set(TOKEN_PREFIX + token, user, TOKEN_EXPIRE_MINUTES, TimeUnit.MINUTES);
+    }
+
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) return true;
         String token = request.getHeader("Authorization");
-        if (token == null || token.isEmpty() || !TOKEN_POOL.containsKey(token)) {
+        if (token == null || token.isEmpty()) {
             response.setStatus(401);
             response.setContentType("application/json;charset=utf-8");
             response.getWriter().write("{\"code\":401,\"msg\":\"未登录或登录已过期\"}");
             return false;
         }
-        CURRENT_USER.set(TOKEN_POOL.get(token));
+        LoginUser loginUser = (LoginUser) redisTemplate.opsForValue().get(TOKEN_PREFIX + token);
+        if (loginUser == null) {
+            response.setStatus(401);
+            response.setContentType("application/json;charset=utf-8");
+            response.getWriter().write("{\"code\":401,\"msg\":\"未登录或登录已过期\"}");
+            return false;
+        }
+        CURRENT_USER.set(loginUser);
+        // 每次请求刷新过期时间
+        redisTemplate.expire(TOKEN_PREFIX + token, TOKEN_EXPIRE_MINUTES, TimeUnit.MINUTES);
         return true;
     }
 

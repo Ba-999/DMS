@@ -9,6 +9,7 @@
 | 后端框架 | Spring Boot 2.7 |
 | ORM | MyBatis-Plus 3.5 |
 | 数据库 | MySQL 8.0 |
+| 缓存/锁 | Redis（Token 持久化 + 分布式锁） |
 | 前端框架 | Vue 2 + Element UI + Vite |
 | 构建工具 | Maven |
 
@@ -29,6 +30,7 @@
 
 - JDK 8+
 - MySQL 8.0+
+- Redis（可选，不装也能跑）
 - Maven 3.6+（或用项目自带的 mvnw）
 - Node.js 16+（前端，可选）
 
@@ -63,6 +65,9 @@ export DB_PASSWORD=你的密码
 | DB_NAME | dormitory_db | 数据库名 |
 | DB_USERNAME | root | 数据库账号 |
 | DB_PASSWORD | root | 数据库密码 |
+| REDIS_HOST | localhost | Redis 地址 |
+| REDIS_PORT | 6379 | Redis 端口 |
+| REDIS_PASSWORD | （空） | Redis 密码 |
 
 ### 4. 启动后端
 

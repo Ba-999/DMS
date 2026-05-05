@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.bdqn.class7.springboot.dms.common.BusinessException;
+import com.bdqn.class7.springboot.dms.common.RedisLock;
 import com.bdqn.class7.springboot.dms.entity.CheckIn;
 import com.bdqn.class7.springboot.dms.entity.DormChange;
 import com.bdqn.class7.springboot.dms.entity.Dormitory;
@@ -29,6 +30,7 @@ public class DormChangeServiceImpl extends ServiceImpl<DormChangeMapper, DormCha
     private final StudentService studentService;
     private final DormitoryService dormitoryService;
     private final CheckInService checkInService;
+    private final RedisLock redisLock;
 
     @Override
     public IPage<DormChange> pageList(Page<DormChange> page, Integer status, String keyword, Integer studentId) {
@@ -77,36 +79,43 @@ public class DormChangeServiceImpl extends ServiceImpl<DormChangeMapper, DormCha
 
         if (status == null || status != 1) return;
 
-        CheckIn currentCheckIn = checkInService.getOne(new LambdaQueryWrapper<CheckIn>()
-                .eq(CheckIn::getStudentId, change.getStudentId())
-                .last("limit 1"));
-        Dormitory targetDorm = dormitoryService.getById(change.getToDormitoryId());
-        if (targetDorm == null) throw new BusinessException("目标宿舍不存在");
-        if (targetDorm.getCurrentNumber() != null && targetDorm.getCapacity() != null && targetDorm.getCurrentNumber() >= targetDorm.getCapacity()) throw new BusinessException("目标宿舍已满员");
+        String lockKey = "lock:dormitory:" + change.getToDormitoryId();
+        if (!redisLock.lock(lockKey)) throw new BusinessException("操作太频繁，请稍后重试");
+        try {
+            CheckIn currentCheckIn = checkInService.getOne(new LambdaQueryWrapper<CheckIn>()
+                    .eq(CheckIn::getStudentId, change.getStudentId())
+                    .last("limit 1"));
+            Dormitory targetDorm = dormitoryService.getById(change.getToDormitoryId());
+            if (targetDorm == null) throw new BusinessException("目标宿舍不存在");
+            if (targetDorm.getCurrentNumber() != null && targetDorm.getCapacity() != null && targetDorm.getCurrentNumber() >= targetDorm.getCapacity())
+                throw new BusinessException("目标宿舍已满员");
 
-        if (currentCheckIn != null) {
-            Dormitory oldDorm = dormitoryService.getById(currentCheckIn.getDormitoryId());
-            currentCheckIn.setDormitoryId(change.getToDormitoryId());
-            checkInService.updateById(currentCheckIn);
-            if (oldDorm != null && oldDorm.getCurrentNumber() != null && oldDorm.getCurrentNumber() > 0) {
-                oldDorm.setCurrentNumber(oldDorm.getCurrentNumber() - 1);
-                dormitoryService.updateById(oldDorm);
+            if (currentCheckIn != null) {
+                Dormitory oldDorm = dormitoryService.getById(currentCheckIn.getDormitoryId());
+                currentCheckIn.setDormitoryId(change.getToDormitoryId());
+                checkInService.updateById(currentCheckIn);
+                if (oldDorm != null && oldDorm.getCurrentNumber() != null && oldDorm.getCurrentNumber() > 0) {
+                    oldDorm.setCurrentNumber(oldDorm.getCurrentNumber() - 1);
+                    dormitoryService.updateById(oldDorm);
+                }
+            } else {
+                CheckIn checkIn = new CheckIn();
+                checkIn.setStudentId(change.getStudentId());
+                checkIn.setDormitoryId(change.getToDormitoryId());
+                checkInService.checkIn(checkIn);
+                return;
             }
-        } else {
-            CheckIn checkIn = new CheckIn();
-            checkIn.setStudentId(change.getStudentId());
-            checkIn.setDormitoryId(change.getToDormitoryId());
-            checkInService.checkIn(checkIn);
-            return;
-        }
 
-        targetDorm.setCurrentNumber(targetDorm.getCurrentNumber() + 1);
-        dormitoryService.updateById(targetDorm);
+            targetDorm.setCurrentNumber(targetDorm.getCurrentNumber() + 1);
+            dormitoryService.updateById(targetDorm);
 
-        Student student = studentService.getById(change.getStudentId());
-        if (student != null && (student.getStatus() == null || student.getStatus() == 0)) {
-            student.setStatus(1);
-            studentService.updateById(student);
+            Student student = studentService.getById(change.getStudentId());
+            if (student != null && (student.getStatus() == null || student.getStatus() == 0)) {
+                student.setStatus(1);
+                studentService.updateById(student);
+            }
+        } finally {
+            redisLock.unlock(lockKey);
         }
     }
 }

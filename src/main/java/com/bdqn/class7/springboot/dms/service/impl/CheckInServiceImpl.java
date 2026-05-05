@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.bdqn.class7.springboot.dms.common.BusinessException;
+import com.bdqn.class7.springboot.dms.common.RedisLock;
 import com.bdqn.class7.springboot.dms.entity.CheckIn;
 import com.bdqn.class7.springboot.dms.entity.Dormitory;
 import com.bdqn.class7.springboot.dms.entity.Student;
@@ -25,26 +26,34 @@ public class CheckInServiceImpl extends ServiceImpl<CheckInMapper, CheckIn> impl
 
     private final StudentService studentService;
     private final DormitoryService dormitoryService;
+    private final RedisLock redisLock;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void checkIn(CheckIn checkIn) {
-        Student stu = studentService.getById(checkIn.getStudentId());
-        if (stu == null) throw new BusinessException("学生不存在");
-        if (stu.getStatus() != null && stu.getStatus() == 1) throw new BusinessException("该学生已入住");
+        String lockKey = "lock:dormitory:" + checkIn.getDormitoryId();
+        if (!redisLock.lock(lockKey)) throw new BusinessException("操作太频繁，请稍后重试");
+        try {
+            Student stu = studentService.getById(checkIn.getStudentId());
+            if (stu == null) throw new BusinessException("学生不存在");
+            if (stu.getStatus() != null && stu.getStatus() == 1) throw new BusinessException("该学生已入住");
 
-        Dormitory dorm = dormitoryService.getById(checkIn.getDormitoryId());
-        if (dorm == null) throw new BusinessException("宿舍不存在");
-        if (dorm.getCurrentNumber() != null && dorm.getCapacity() != null && dorm.getCurrentNumber() >= dorm.getCapacity()) throw new BusinessException("该宿舍已满员");
+            Dormitory dorm = dormitoryService.getById(checkIn.getDormitoryId());
+            if (dorm == null) throw new BusinessException("宿舍不存在");
+            if (dorm.getCurrentNumber() != null && dorm.getCapacity() != null && dorm.getCurrentNumber() >= dorm.getCapacity())
+                throw new BusinessException("该宿舍已满员");
 
-        if (checkIn.getCheckInDate() == null) checkIn.setCheckInDate(LocalDate.now());
-        save(checkIn);
+            if (checkIn.getCheckInDate() == null) checkIn.setCheckInDate(LocalDate.now());
+            save(checkIn);
 
-        stu.setStatus(1);
-        studentService.updateById(stu);
+            stu.setStatus(1);
+            studentService.updateById(stu);
 
-        dorm.setCurrentNumber(dorm.getCurrentNumber() + 1);
-        dormitoryService.updateById(dorm);
+            dorm.setCurrentNumber(dorm.getCurrentNumber() + 1);
+            dormitoryService.updateById(dorm);
+        } finally {
+            redisLock.unlock(lockKey);
+        }
     }
 
     @Override
@@ -52,17 +61,24 @@ public class CheckInServiceImpl extends ServiceImpl<CheckInMapper, CheckIn> impl
     public void checkOut(Integer id) {
         CheckIn rec = getById(id);
         if (rec == null) throw new BusinessException("记录不存在");
-        removeById(id);
 
-        Student stu = studentService.getById(rec.getStudentId());
-        if (stu != null) {
-            stu.setStatus(0);
-            studentService.updateById(stu);
-        }
-        Dormitory dorm = dormitoryService.getById(rec.getDormitoryId());
-        if (dorm != null && dorm.getCurrentNumber() != null && dorm.getCurrentNumber() > 0) {
-            dorm.setCurrentNumber(dorm.getCurrentNumber() - 1);
-            dormitoryService.updateById(dorm);
+        String lockKey = "lock:dormitory:" + rec.getDormitoryId();
+        if (!redisLock.lock(lockKey)) throw new BusinessException("操作太频繁，请稍后重试");
+        try {
+            removeById(id);
+
+            Student stu = studentService.getById(rec.getStudentId());
+            if (stu != null) {
+                stu.setStatus(0);
+                studentService.updateById(stu);
+            }
+            Dormitory dorm = dormitoryService.getById(rec.getDormitoryId());
+            if (dorm != null && dorm.getCurrentNumber() != null && dorm.getCurrentNumber() > 0) {
+                dorm.setCurrentNumber(dorm.getCurrentNumber() - 1);
+                dormitoryService.updateById(dorm);
+            }
+        } finally {
+            redisLock.unlock(lockKey);
         }
     }
 
